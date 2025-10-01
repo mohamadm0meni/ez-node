@@ -5,36 +5,20 @@
     "dns": {
         "servers": [
             {
-                "address": "udp://1.1.1.1"
+                "tag": "dns-remote",
+                "address": "1.1.1.1"
             }
         ]
     },
-    "inbounds": [
-        {
-            "type": "shadowsocks",
-            "listen": "127.0.0.1",
-            "listen_port": 6290,
-            "sniff": true,
-            "network": "tcp",
-            "method": "2022-blake3-aes-128-gcm",
-            "password": "8JCsPssfgS8tiRwiMlhARg=="
-        }
-    ],
+    "inbounds": [],
     "outbounds": [
         {
-            "type": "direct"
-        },
-        {
-            "type": "dns",
-            "tag": "dns-out"
+            "type": "direct",
+            "tag": "direct"
         }
     ],
     "route": {
-        "rules": [
-            {
-                "protocol": "dns",
-                "outbound": "dns-out"
-            }
-        ]
+        "rules": [],
+        "final": "direct"
     }
 }
