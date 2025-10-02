@@ -76,7 +76,7 @@ hys_architecture() {
 print_info "Installing necessary packages..."
 print_info "DON'T PANIC IF IT LOOKS STUCK!"
 sudo apt-get update
-sudo apt-get install curl socat git wget unzip make golang -y
+sudo apt-get install curl socat git wget unzip make -y
 
 # Docker installation
 if ! command -v docker &> /dev/null; then
@@ -93,6 +93,22 @@ if ! command -v docker &> /dev/null; then
 else
   print_success "Docker installation found!"
 fi
+
+# Install newer Go version for sing-box compilation
+print_info "Installing Go 1.23.2 for sing-box compilation..."
+GO_VERSION="1.23.2"
+GO_ARCH="amd64"
+case "$(uname -m)" in
+    aarch64) GO_ARCH="arm64" ;;
+    armv7* | armv7l) GO_ARCH="armv6l" ;;
+esac
+
+cd /tmp
+wget -q "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
+sudo rm -rf /usr/local/go
+sudo tar -C /usr/local -xzf "go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
+rm "go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
+print_success "Go ${GO_VERSION} installed successfully"
 
 # Folder name
 print_info "Set a name for node directory (leave blank for a random name - not recommended): "
@@ -173,22 +189,44 @@ fi
 
 print_success "Success! xray installed"
 
-# bulding sing-box
+# Building sing-box with v2ray_api support
 cd /opt/marznode/$node_directory/sing-box
-wget -O config.json "https://raw.githubusercontent.com/mikeesierrah/ez-node/refs/heads/main/etc/sing-box.json"
-echo $sversion
-wget -O sing.zip "https://github.com/SagerNet/sing-box/archive/refs/tags/v${sversion#v}.zip"
-unzip sing.zip
-cd ./sing-box-${sversion#v}
-# TAGS="with_gvisor,with_quic,with_dhcp,with_wireguard,with_ech,with_utls,with_reality_server,with_acme,with_clash_api,with_v2ray_api,with_grpc" make
-go build -v -trimpath -ldflags "-X github.com/sagernet/sing-box/constant.Version=${sversion#v} -s -w -buildid=" -tags with_gvisor,with_dhcp,with_wireguard,with_reality_server,with_clash_api,with_quic,with_utls,with_ech,with_v2ray_api,with_grpc ./cmd/sing-box
-chmod +x ./sing-box
-mv sing-box /opt/marznode/$node_directory/sing-box/$node_directory-box
-cd ..
-rm sing.zip
-rm -rf ./sing-box-${sversion#v}
+wget -O config.json "https://raw.githubusercontent.com/mohamadm0meni/ez-node/refs/heads/main/etc/sing-box.json"
 
-print_success "Success! sing-box installed"
+print_info "Building sing-box core version $sversion with v2ray_api support..."
+
+clean_version="${sversion#v}"
+
+print_info "Downloading sing-box source code..."
+wget -O sing-box-src.tar.gz "https://github.com/SagerNet/sing-box/archive/refs/tags/v${clean_version}.tar.gz"
+
+if tar -xzf sing-box-src.tar.gz; then
+    cd "sing-box-${clean_version}"
+    
+    print_info "Compiling sing-box (this may take a few minutes)..."
+    
+    if CGO_ENABLED=0 /usr/local/go/bin/go build -v -trimpath \
+      -ldflags "-X github.com/sagernet/sing-box/constant.Version=${clean_version} -s -w -buildid=" \
+      -tags "with_gvisor,with_dhcp,with_wireguard,with_utls,with_clash_api,with_quic,with_v2ray_api,with_grpc" \
+      -o "../${node_directory}-box" ./cmd/sing-box; then
+        
+        cd ..
+        rm -rf "sing-box-${clean_version}" sing-box-src.tar.gz
+        chmod +x "${node_directory}-box"
+        
+        if "./${node_directory}-box" version &>/dev/null; then
+            print_success "Success! sing-box installed with v2ray_api support"
+        else
+            print_error "WARNING: sing-box executable test failed"
+        fi
+    else
+        print_error "Failed to compile sing-box"
+        exit 1
+    fi
+else
+    print_error "Failed to extract sing-box source"
+    exit 1
+fi
 
 # Fetching hysteria core and setting it up
 cd /opt/marznode/$node_directory/hysteria
@@ -285,5 +323,3 @@ print_success "Script installed successfully at /usr/local/bin/marznode"
 
 cd "/opt/marznode/$node_directory" || { print_error "Something went wrong! Couldn't enter $node_directory directory"; exit 1; }
 docker compose up -d --remove-orphans
-
-
